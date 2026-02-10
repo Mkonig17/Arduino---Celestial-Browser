@@ -1,0 +1,252 @@
+// This code segment controls the stepper motors (output) as a function of the information provided by the user and the rotary encoders (input)
+#include <Wire.h>
+#include <Stepper.h>
+#define AS5600_ADDR 0x36
+
+
+const int stepsPerRevolution = 2048;
+const float angleTolerance = 0.5;  // Degrees of tolerance
+
+
+
+
+// Stepper Motors
+Stepper stepperazi(stepsPerRevolution, 8, 10, 9, 11);
+Stepper stepperalt(stepsPerRevolution, 4, 6, 5, 7);
+
+
+
+
+// Servos (reserved for future use)
+Servo servoAzimuth;
+Servo servoAltitude;
+
+
+
+
+// Coordinate Variables
+float rightAscension, declination, latitude, longitude;
+int step = 1;
+int coostatus = 0;
+
+
+
+
+int raDeg, raMin, raSec;
+int decHour, decMin, decSec;
+int latDeg, latMin, latSec;
+int longDeg, longMin, longSec;
+char latDir;
+char longDir;
+
+
+
+
+// Axis enum
+enum AxisType { AZIMUTH,
+                ALTITUDE };
+
+
+
+
+//AS5600
+uint16_t readAngle(TwoWire &bus) {
+  bus.beginTransmission(AS5600_ADDR);
+  bus.write(0x0E);
+  bus.endTransmission();
+  bus.requestFrom(AS5600_ADDR, 2);
+
+
+
+
+  uint8_t msb = bus.read();
+  uint8_t lsb = bus.read();
+  return ((msb & 0x0F) << 8) | lsb;
+}
+
+
+
+
+
+
+void moveToAngle(Stepper &stepper, TwoWire &bus, float targetAngle, AxisType axis) {
+  while (true) {
+    float currentAngle = readAngle(bus) * 360.0 / 4096.0;
+    float error = targetAngle - currentAngle;
+
+
+
+
+    if (error > 180) error -= 360;
+    if (error < -180) error += 360;
+
+
+
+
+    if (abs(error) <= angleTolerance) break;
+
+
+
+
+    int direction = (error > 0) ? 1 : -1;
+    stepper.step(direction);
+    delay(5);
+  }
+
+
+
+
+  if (axis == AZIMUTH)
+    Serial.println("Azimuth aligned");
+  else
+    Serial.println("Altitude aligned");
+}
+
+
+
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();  // I2C for encoder
+  // Wire1.begin(); // Uncomment for second encoder on another bus
+
+
+
+
+  stepperazi.setSpeed(10);  // RPM
+  stepperalt.setSpeed(10);  // RPM
+
+
+
+
+  servoAzimuth.attach(9);
+  servoAltitude.attach(10);
+
+
+
+
+  Serial.println("Enter your current latitude and longitude in the format:");
+  Serial.println("Lat=deg,arcmin,arcsec,N/S Long=deg,arcmin,arcsec,E/W");
+}
+
+
+
+
+void loop() {
+  while (step == 1) {
+    if (Serial.available()) {
+      String input = Serial.readStringUntil('\n');
+      input.trim();
+
+
+
+
+      if (sscanf(input.c_str(),
+                 "Lat=%d,%d,%d,%c Long=%d,%d,%d,%c",
+                 &latDeg, &latMin, &latSec, &latDir,
+                 &longDeg, &longMin, &longSec, &longDir)
+          == 8) {
+
+
+
+
+        latitude = latDeg + latMin / 60.0 + latSec / 3600.0;
+        longitude = longDeg + longMin / 60.0 + longSec / 3600.0;
+        if (latDir == 'S' || latDir == 's') latitude = -latitude;
+        if (longDir == 'W' || longDir == 'w') longitude = -longitude;
+
+
+
+
+        Serial.println("Current coordinates:");
+        Serial.printf("Lat: %d°%d'%d\" %c\n", latDeg, latMin, latSec, latDir);
+        Serial.printf("Long: %d°%d'%d\" %c\n", longDeg, longMin, longSec, longDir);
+
+
+
+
+        Serial.println("Enter the celestial coordinates of the object:");
+        Serial.println("RA=deg,arcmin,arcsec Dec=hour,min,sec");
+
+
+
+
+        step = 2;
+      } else {
+        Serial.println("Invalid format. Try: Lat=deg,arcmin,arcsec,N/S Long=deg,arcmin,arcsec,E/W");
+      }
+    }
+  }
+
+
+
+
+  while (step == 2) {
+    if (Serial.available()) {
+      String input = Serial.readStringUntil('\n');
+      input.trim();
+
+
+
+
+      if (sscanf(input.c_str(),
+                 "RA=%d,%d,%d Dec=%d,%d,%d",
+                 &raDeg, &raMin, &raSec,
+                 &decHour, &decMin, &decSec)
+          == 6) {
+
+
+
+
+        rightAscension = raDeg + raMin / 60.0 + raSec / 3600.0;
+        declination = (decHour + decMin / 60.0 + decSec / 3600.0) * 15.0;
+
+
+
+
+        Serial.println("Currently observing:");
+        Serial.printf("RA: %d°%d'%d\"\n", raDeg, raMin, raSec);
+        Serial.printf("Dec: %dh%dm%ds\n", decHour, decMin, decSec);
+
+
+
+
+        Serial.println("To change the object, enter new coordinates:");
+        Serial.println("RA=deg,arcmin,arcsec Dec=hour,min,sec");
+
+
+
+
+        coostatus = 1;
+      } else {
+        Serial.println("Invalid format. Use: RA=deg,arcmin,arcsec Dec=hour,min,sec");
+      }
+    }
+  }
+
+
+
+
+  while (coostatus == 1) {
+    // TODO: Replace with actual coordinate conversion (below)
+    float targetAzimuth = 135.0;
+    float targetAltitude = 45.0;
+
+
+
+
+    Serial.println("Moving to target position...");
+
+
+
+
+    moveToAngle(stepperazi, Wire, targetAzimuth, AZIMUTH);
+    moveToAngle(stepperalt, Wire1, targetAltitude, ALTITUDE);
+
+
+
+
+    Serial.println("Target acquired.");
+    coostatus = 0;
+  }
+}
