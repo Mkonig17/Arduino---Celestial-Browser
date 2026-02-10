@@ -1,4 +1,4 @@
-// This code segment controls the stepper motors (output) as a function of the information provided by the user and the rotary encoders (input)
+// This code segment controls the stepper motors (output) as a function of the information provided by the user and the rotary encoders (input). by Michael Weltz
 #include <Wire.h>
 #include <Stepper.h>
 #define AS5600_ADDR 0x36
