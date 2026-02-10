@@ -1,0 +1,85 @@
+// This code segment uses the RTC chip to obtain precise date/time. by Mikael Marineau
+#include <RtcDS1302.h> // model of the rtc module DS1302
+#include <ThreeWire.h>
+
+
+// CLK pin = 25
+// DAT pin = 24
+// RST pin = 22
+
+
+ThreeWire wire(24,25,22); // wire(DAT, CLK, RST)
+RtcDS1302<ThreeWire> rtc(wire);  //create rtc object
+
+
+void setup() {
+  Serial.begin(9600);
+  delay(1000);
+
+
+  rtc.Begin();
+
+
+  if (!rtc.GetIsRunning()) {
+    Serial.println("Clock not running. Starting now...");
+    rtc.SetIsRunning(true);
+    delay(1000);
+  } else {
+    Serial.println("Clock is running...");
+    delay(1000);
+  }
+
+
+  if (rtc.GetIsWriteProtected()) {
+    Serial.println("Enabling writing...");
+    delay(1000);
+  }
+
+
+  // Serial.println(__DATE__);
+  // Serial.println(__TIME__);
+
+
+  RtcDateTime compiled = RtcDateTime(__DATE__, __TIME__);
+  if (!rtc.IsDateTimeValid()) {
+    Serial.println("Updating Date & Time... (invalid)");
+    rtc.SetDateTime(compiled);
+    delay(1000);
+  }
+
+
+  RtcDateTime live = rtc.GetDateTime();
+  if (live < compiled) {  // rtc is older (not updated to current time)
+    Serial.println("Updating Date & Time... (older)");
+    rtc.SetDateTime(compiled);
+    delay(1000);
+  }
+}
+
+
+void loop() {
+
+
+  RtcDateTime live = rtc.GetDateTime();
+  double year = live.Year();
+  Serial.print("Year: ");
+  Serial.println(year);
+  double month = live.Month();
+  Serial.print("Month: ");
+  Serial.println(month);
+  double day = live.Day();
+  Serial.print("Day: ");
+  Serial.println(day);
+  double hour = live.Hour();
+  Serial.print("Hour: ");
+  Serial.println(hour);
+  double min = live.Minute();
+  Serial.print("Minute: ");
+  Serial.println(min);
+  double sec = live.Second();
+  Serial.print("Second: ");
+  Serial.println(sec);
+
+
+  while (1);
+}
